@@ -1,0 +1,97 @@
+---
+title: "Introduction to weaiR"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to weaiR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Overview
+
+The `weaiR` package computes the Women's Empowerment in Agriculture Index
+(WEAI) family of indices from pre-computed binary adequacy indicators. It
+supports:
+
+- **pro-WEAI** (3 domains, 10 indicators)
+- **WEAI** (5 domains, 10 indicators)
+- **A-WEAI** (5 domains, 6 indicators)
+- Custom domain/indicator/weight configurations
+
+## Quick Start
+
+```{r basic}
+library(weaiR)
+data(weai_sample)
+
+# Compute pro-WEAI
+res <- weai(
+  weai_sample,
+  domains = list(
+    intrinsic = c("autonomy_inc", "selfeff", "never_violence"),
+    instrumental = c("feelinputdecagr", "assetownership", "credit_accdec",
+                     "incomecontrol", "work_balance", "mobility"),
+    collective = c("groupmember")
+  ),
+  sex = "sex", female = 2, hhid = "hhid"
+)
+
+print(res)
+```
+
+## Understanding the Output
+
+The result is a `weai_result` object containing:
+
+- `$individual`: Per-person empowerment scores, parity status, and indices
+- `$aggregate`: Population-level H, A, M0, DE, HGPI, IGPI, GPI, WEAI
+- `$decomposition`: Per-indicator uncensored/censored headcounts and contributions
+
+### Aggregate Results
+
+```{r aggregate}
+# Access individual components
+res$aggregate$overall$WEAI
+res$aggregate$de_female$DE
+res$aggregate$gpi$GPI
+```
+
+### Individual-Level Data
+
+```{r individual}
+head(res$individual[, c("hhid", "sex", "emp_score", "empowered",
+                         "gender_parity")])
+```
+
+### Detailed Summary
+
+Use `summary()` to see the full decomposition tables:
+
+```{r summary}
+summary(res)
+```
+
+## Subgroup Analysis
+
+Add `by` to decompose results by a grouping variable:
+
+```{r subgroup}
+res_by <- weai(
+  weai_sample,
+  domains = list(
+    intrinsic = c("autonomy_inc", "selfeff", "never_violence"),
+    instrumental = c("feelinputdecagr", "assetownership", "credit_accdec",
+                     "incomecontrol", "work_balance", "mobility"),
+    collective = c("groupmember")
+  ),
+  sex = "sex", female = 2, hhid = "hhid", by = "group"
+)
+
+# Access subgroup results
+names(res_by$subgroup)
+res_by$subgroup[["1"]]$weai
+```

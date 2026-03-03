@@ -1,0 +1,72 @@
+---
+title: "Using Survey Designs with weaiR"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using Survey Designs with weaiR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Survey-Weighted Estimation
+
+When working with complex survey data, you can pass a `survey.design` object
+to get properly weighted estimates with standard errors.
+
+### Creating a Survey Design
+
+```{r survey, eval = requireNamespace("survey", quietly = TRUE)}
+library(weaiR)
+library(survey)
+data(weai_sample)
+
+# Remove rows with missing indicators
+complete <- complete.cases(weai_sample[, c(
+  "autonomy_inc", "selfeff", "never_violence",
+  "feelinputdecagr", "assetownership", "credit_accdec",
+  "incomecontrol", "work_balance", "mobility", "groupmember"
+)])
+ws_clean <- weai_sample[complete, ]
+
+# Create a simple survey design (SRS)
+des <- svydesign(ids = ~1, data = ws_clean)
+
+# Compute WEAI with survey design
+res <- weai(
+  design = des,
+  domains = list(
+    intrinsic = c("autonomy_inc", "selfeff", "never_violence"),
+    instrumental = c("feelinputdecagr", "assetownership", "credit_accdec",
+                     "incomecontrol", "work_balance", "mobility"),
+    collective = c("groupmember")
+  ),
+  sex = "sex", female = 2, hhid = "hhid"
+)
+
+print(res)
+```
+
+### When to Use Survey Designs
+
+Use the `design` parameter when:
+
+- Your data comes from a stratified or clustered sample
+- You have sampling weights (probability weights)
+- You need standard errors for the aggregate estimates
+
+When `design` is provided:
+
+- All aggregate statistics (H, A, M0, HGPI, IGPI) use `survey::svymean()`
+- Standard errors are stored in the result object
+- The `data` parameter is ignored (data is extracted from the design)
+
+### Accessing Standard Errors
+
+```{r se, eval = FALSE}
+# Standard errors are in the se_ fields
+res$aggregate$de_female$se_H
+res$aggregate$de_female$se_M0
+```

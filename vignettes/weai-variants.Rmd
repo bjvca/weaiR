@@ -1,0 +1,91 @@
+---
+title: "WEAI Variants: pro-WEAI, WEAI, and A-WEAI"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{WEAI Variants: pro-WEAI, WEAI, and A-WEAI}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## WEAI Variants
+
+The `weai()` function supports all major variants of the Women's Empowerment
+in Agriculture Index. The variant is determined by the number of domains and
+indicators you specify.
+
+### pro-WEAI (3 domains, 10 indicators)
+
+The project-level WEAI uses 3 domains with equal indicator weights (1/10 each):
+
+```{r proweai}
+library(weaiR)
+data(weai_sample)
+
+res_pro <- weai(
+  weai_sample,
+  domains = list(
+    intrinsic = c("autonomy_inc", "selfeff", "never_violence"),
+    instrumental = c("feelinputdecagr", "assetownership", "credit_accdec",
+                     "incomecontrol", "work_balance", "mobility"),
+    collective = c("groupmember")
+  ),
+  sex = "sex", female = 2, hhid = "hhid"
+)
+print(res_pro)
+```
+
+### A-WEAI (5 domains, 6 indicators)
+
+The abbreviated WEAI uses 5 domains with specific weights:
+
+```{r aweai}
+res_aweai <- weai(
+  weai_sample,
+  domains = list(
+    d1 = c("feelinputdecagr"),
+    d2 = c("assetownership", "credit_accdec"),
+    d3 = c("incomecontrol"),
+    d4 = c("work_balance"),
+    d5 = c("groupmember")
+  ),
+  weights = list(
+    d1 = 0.2,
+    d2 = c(0.13333, 0.06667),
+    d3 = 0.2,
+    d4 = 0.2,
+    d5 = 0.2
+  ),
+  sex = "sex", female = 2, hhid = "hhid"
+)
+print(res_aweai)
+```
+
+### Custom Cutoff
+
+You can change the empowerment threshold (default is 0.80):
+
+```{r cutoff}
+res_75 <- weai(
+  weai_sample,
+  domains = list(
+    intrinsic = c("autonomy_inc", "never_violence"),
+    instrumental = c("feelinputdecagr", "assetownership", "credit_accdec",
+                     "incomecontrol", "work_balance"),
+    collective = c("groupmember")
+  ),
+  cutoff = 0.75,
+  sex = "sex", female = 2, hhid = "hhid"
+)
+print(res_75)
+```
+
+## Default Weights
+
+When `weights` is not provided:
+
+- **3 domains**: Equal weight per indicator (1/N for each indicator)
+- **5 domains**: Equal weight per domain (1/5), split equally within domains

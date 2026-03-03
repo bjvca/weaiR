@@ -1,0 +1,26 @@
+Package: weaiR
+Title: Women's Empowerment in Agriculture Index (WEAI)
+Version: 1.0.0
+Authors@R: person("WEAI Team", email = "weai@example.com", role = c("aut", "cre"))
+Description: Computes the Women's Empowerment in Agriculture Index (WEAI) family
+    of indices, including WEAI, A-WEAI, and pro-WEAI from pre-computed binary
+    adequacy indicators. Implements the Alkire-Foster methodology for measuring
+    empowerment, including the Five/Three Domains of Empowerment (5DE/3DE)
+    sub-index, Gender Parity Index (GPI), and indicator-level decomposition.
+    Supports survey designs via the 'survey' package and subgroup decomposition.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends: R (>= 3.5.0)
+Imports:
+    stats,
+    survey
+Suggests:
+    ggplot2,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+Config/testthat/edition: 3
+VignetteBuilder: knitr
