@@ -1,0 +1,436 @@
+---
+title: "Technical Note: Computing the WEAI Family of Indices with weaiR"
+author: "weaiR Development Team"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Technical Note: Computing the WEAI Family of Indices with weaiR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## 1. Introduction
+
+The Women's Empowerment in Agriculture Index (WEAI) is a standardized,
+survey-based tool developed to track gender equality and measure empowerment,
+agency, and women's inclusion in the agricultural sector (Alkire et al. 2013).
+Since its initial release in 2012, abbreviated (A-WEAI; Malapit et al. 2017) and
+project-level (pro-WEAI; Malapit et al. 2019) versions have been developed.
+
+The `weaiR` package provides an R implementation for computing all three versions
+of the WEAI from pre-computed binary adequacy indicators. The package implements
+the Alkire-Foster methodology (Alkire and Foster 2011) and produces results
+equivalent to the Stata `weai` command (version 2.0.0).
+
+This technical note describes the mathematical framework, the computational
+algorithms, and practical usage of the package.
+
+## 2. Mathematical Framework
+
+### 2.1 Notation
+
+Let $n$ denote the number of individuals in the sample and $d$ the total number
+of binary adequacy indicators. For each individual $i$ and indicator $j$:
+
+- $x_{ij} \in \{0, 1\}$: adequacy status (1 = adequate, 0 = inadequate)
+- $w_j > 0$: indicator weight, where $\sum_{j=1}^{d} w_j = 1$
+- $k \in (0, 1]$: empowerment cutoff (default: 0.80)
+
+### 2.2 Individual-Level Scores
+
+The **deprivation score** for individual $i$ is the weighted share of indicators
+in which the individual is inadequate:
+
+$$c_i = \sum_{j=1}^{d} w_j \cdot (1 - x_{ij})$$
+
+The **empowerment score** is the complement:
+
+$$e_i = 1 - c_i$$
+
+An individual is classified as **empowered** if $e_i \geq k$, and
+**disempowered** otherwise.
+
+### 2.3 The 5DE/3DE Sub-Index
+
+The Domains of Empowerment sub-index is based on the adjusted headcount ratio
+$M_0$ from the Alkire-Foster methodology:
+
+**Disempowerment headcount ratio** ($H$): the proportion of individuals who
+are disempowered:
+
+$$H = \frac{1}{n} \sum_{i=1}^{n} \mathbf{1}(e_i < k)$$
+
+**Average deprivation intensity** ($A$): the mean deprivation score among
+the disempowered:
+
+$$A = \frac{\sum_{i=1}^{n} c_i \cdot \mathbf{1}(e_i < k)}{\sum_{i=1}^{n} \mathbf{1}(e_i < k)}$$
+
+**Adjusted headcount** ($M_0$): combines prevalence and intensity:
+
+$$M_0 = H \times A$$
+
+The **DE sub-index** is:
+
+$$\text{DE} = 1 - M_0$$
+
+The sub-index is called 5DE when computed with 5 domains (WEAI, A-WEAI) and
+3DE when computed with 3 domains (pro-WEAI).
+
+### 2.4 The Gender Parity Index (GPI)
+
+The GPI measures intrahousehold equality in empowerment. It is computed on
+**dual-adult households** only---households with exactly one male and one female
+respondent.
+
+#### Step 1: Censored Inadequacy Scores
+
+For each individual in a dual-adult household, the censored inadequacy score
+sets a floor at $1 - k$:
+
+$$\tilde{c}_i = \max(c_i,\ 1 - k)$$
+
+This ensures that even empowered individuals receive a minimum inadequacy
+score when computing parity gaps.
+
+#### Step 2: Gender Parity Status
+
+A household achieves **gender parity** if either:
+
+1. The woman is empowered ($e_{\text{woman}} \geq k$), **or**
+2. The woman's censored inadequacy does not exceed the man's
+   ($\tilde{c}_{\text{woman}} \leq \tilde{c}_{\text{man}}$).
+
+#### Step 3: Parity Gap
+
+For households *without* gender parity, the normalized empowerment gap is:
+
+$$g_h = \frac{\tilde{c}_{\text{woman}} - \tilde{c}_{\text{man}}}{1 - \tilde{c}_{\text{man}}}$$
+
+#### Step 4: GPI Components
+
+**Headcount ratio without parity** ($H_{\text{GPI}}$): proportion of
+dual-adult households lacking gender parity.
+
+**Mean empowerment gap** ($I_{\text{GPI}}$): average gap among households
+without parity.
+
+$$\text{GPI} = 1 - H_{\text{GPI}} \times I_{\text{GPI}}$$
+
+### 2.5 The Overall WEAI
+
+The WEAI is a weighted composite of the female DE sub-index and the GPI:
+
+$$\text{WEAI} = 0.9 \times \text{DE}_{\text{female}} + 0.1 \times \text{GPI}$$
+
+### 2.6 Indicator-Level Decomposition
+
+The $M_0$ measure can be decomposed by indicator to identify the drivers
+of disempowerment:
+
+**Uncensored headcount** for indicator $j$: the proportion of all
+individuals who are inadequate in indicator $j$:
+
+$$h_j^{U} = \frac{1}{n} \sum_{i=1}^{n} (1 - x_{ij})$$
+
+**Censored headcount** for indicator $j$: the proportion of individuals who
+are *both* disempowered *and* inadequate in indicator $j$:
+
+$$h_j^{C} = \frac{1}{n} \sum_{i=1}^{n} (1 - x_{ij}) \cdot \mathbf{1}(e_i < k)$$
+
+**Absolute contribution** of indicator $j$ to $M_0$:
+
+$$C_j = w_j \cdot h_j^{C}$$
+
+Note that $\sum_{j} C_j = M_0$.
+
+**Relative contribution** (percentage):
+
+$$R_j = \frac{C_j}{M_0} \times 100\%$$
+
+The relative contributions sum to 100%.
+
+## 3. WEAI Variants
+
+### 3.1 pro-WEAI (3 Domains, 10 Indicators)
+
+| Domain | Indicator | Weight |
+|:-------|:----------|:-------|
+| Intrinsic agency | Autonomy in income | 1/10 |
+| | Self-efficacy | 1/10 |
+| | Attitudes about IPV | 1/10 |
+| Instrumental agency | Input in livelihood decisions | 1/10 |
+| | Ownership of land and assets | 1/10 |
+| | Access to financial services | 1/10 |
+| | Control over income | 1/10 |
+| | Work balance | 1/10 |
+| | Visiting important locations | 1/10 |
+| Collective agency | Group membership | 1/10 |
+
+Default weights: $w_j = 1/10$ for all $j$ (equal per indicator).
+
+### 3.2 WEAI (5 Domains, 10 Indicators)
+
+| Domain | Indicator | Weight |
+|:-------|:----------|:-------|
+| Production | Input in productive decisions | 1/10 |
+| | Autonomy in production | 1/10 |
+| Resources | Ownership of assets | 1/15 |
+| | Purchase/sale/transfer of assets | 1/15 |
+| | Access to and decisions about credit | 1/15 |
+| Income | Control over use of income | 1/5 |
+| Leadership | Group membership | 1/10 |
+| | Speaking in public | 1/10 |
+| Time | Workload | 1/10 |
+| | Leisure | 1/10 |
+
+Default weights: $w_j = \frac{1}{5 \times d_k}$ where $d_k$ is the number
+of indicators in domain $k$ (equal weight per domain, split equally within).
+
+### 3.3 A-WEAI (5 Domains, 6 Indicators)
+
+| Domain | Indicator | Weight |
+|:-------|:----------|:-------|
+| Production | Input in productive decisions | 1/5 |
+| Resources | Ownership of assets | 2/15 |
+| | Access to credit | 1/15 |
+| Income | Control over use of income | 1/5 |
+| Time | Work balance | 1/5 |
+| Leadership | Group membership | 1/5 |
+
+Custom weights must be specified for the A-WEAI; the default 5-domain
+weighting does not reproduce the published A-WEAI weights.
+
+## 4. Usage
+
+### 4.1 Basic Pro-WEAI
+
+```{r proweai}
+library(weaiR)
+data(weai_sample)
+
+res <- weai(
+  weai_sample,
+  domains = list(
+    intrinsic = c("autonomy_inc", "selfeff", "never_violence"),
+    instrumental = c("feelinputdecagr", "assetownership", "credit_accdec",
+                     "incomecontrol", "work_balance", "mobility"),
+    collective = c("groupmember")
+  ),
+  sex = "sex",
+  female = 2,
+  hhid = "hhid"
+)
+
+print(res)
+```
+
+### 4.2 A-WEAI with Custom Weights
+
+```{r aweai}
+res_aweai <- weai(
+  weai_sample,
+  domains = list(
+    d1 = c("feelinputdecagr"),
+    d2 = c("assetownership", "credit_accdec"),
+    d3 = c("incomecontrol"),
+    d4 = c("work_balance"),
+    d5 = c("groupmember")
+  ),
+  weights = list(
+    d1 = 0.2,
+    d2 = c(0.13333, 0.06667),
+    d3 = 0.2,
+    d4 = 0.2,
+    d5 = 0.2
+  ),
+  sex = "sex",
+  female = 2,
+  hhid = "hhid"
+)
+
+print(res_aweai)
+```
+
+### 4.3 Changing the Empowerment Cutoff
+
+```{r cutoff}
+res_75 <- weai(
+  weai_sample,
+  domains = list(
+    intrinsic = c("autonomy_inc", "never_violence"),
+    instrumental = c("feelinputdecagr", "assetownership", "credit_accdec",
+                     "incomecontrol", "work_balance"),
+    collective = c("groupmember")
+  ),
+  cutoff = 0.75,
+  sex = "sex",
+  female = 2,
+  hhid = "hhid"
+)
+
+print(res_75)
+```
+
+### 4.4 Subgroup Decomposition
+
+```{r subgroup}
+res_by <- weai(
+  weai_sample,
+  domains = list(
+    intrinsic = c("autonomy_inc", "selfeff", "never_violence"),
+    instrumental = c("feelinputdecagr", "assetownership", "credit_accdec",
+                     "incomecontrol", "work_balance", "mobility"),
+    collective = c("groupmember")
+  ),
+  sex = "sex",
+  female = 2,
+  hhid = "hhid",
+  by = "group"
+)
+
+# Subgroup-specific WEAI values
+sapply(res_by$subgroup, function(sg) sg$weai)
+```
+
+### 4.5 Detailed Decomposition
+
+The `summary()` method displays uncensored and censored inadequacy headcount
+ratios and the relative contribution of each indicator to disempowerment:
+
+```{r summary}
+summary(res)
+```
+
+### 4.6 Visualization
+
+The `plot()` method produces a stacked bar chart showing the absolute
+contribution of each indicator to disempowerment (requires `ggplot2`):
+
+```{r plot, fig.cap="Absolute contribution of each indicator to disempowerment."}
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  plot(res)
+}
+```
+
+### 4.7 Accessing Individual-Level Results
+
+The `$individual` component contains per-person results that can be used
+for further analysis:
+
+```{r individual}
+head(res$individual[, c("hhid", "sex", "emp_score", "empowered",
+                         "gender_parity", "hh_ineq")])
+```
+
+### 4.8 Survey-Weighted Estimation
+
+When data come from a complex survey, pass a `survey.design` object to
+obtain properly weighted estimates:
+
+```{r survey, eval = requireNamespace("survey", quietly = TRUE)}
+library(survey)
+
+# Remove rows with missing indicators for clean design
+complete <- complete.cases(weai_sample[, 4:13])
+ws_clean <- weai_sample[complete, ]
+
+des <- svydesign(ids = ~1, data = ws_clean)
+
+res_svy <- weai(
+  design = des,
+  domains = list(
+    intrinsic = c("autonomy_inc", "selfeff", "never_violence"),
+    instrumental = c("feelinputdecagr", "assetownership", "credit_accdec",
+                     "incomecontrol", "work_balance", "mobility"),
+    collective = c("groupmember")
+  ),
+  sex = "sex",
+  female = 2,
+  hhid = "hhid"
+)
+
+print(res_svy)
+```
+
+## 5. Data Requirements
+
+The input data must satisfy the following conditions:
+
+1. **Binary indicators**: Each adequacy indicator must contain only values
+   0 (inadequate), 1 (adequate), or `NA` (missing). Rows with any missing
+   indicator are excluded from the estimation sample.
+
+2. **Sex variable**: Must contain exactly two unique non-missing values.
+   The `female` argument specifies which value identifies female respondents.
+
+3. **Household ID**: Must uniquely identify households. Each household
+   should contain at most one male and one female respondent for the GPI
+   to be computed. Households with a single respondent are used for the
+   DE sub-index but excluded from the GPI.
+
+4. **At least 3 domains**: The domain structure must specify at least
+   3 groups of indicators.
+
+5. **Weights sum to 1**: If custom weights are provided, they must sum
+   to 1 (a tolerance of 0.01 is allowed, after which they are rescaled).
+
+## 6. Computational Notes
+
+### 6.1 Handling of Missing Values
+
+Individuals with a missing value on any indicator are excluded from the
+entire analysis. A message reports the number of excluded observations.
+This matches the behavior of the Stata `weai` command.
+
+### 6.2 Numerical Precision
+
+Small deprivation scores (below 0.0006) are set to zero, and the
+empowerment threshold is applied with a tolerance of $10^{-4}$. These
+choices match the Stata implementation and ensure consistent
+classification at boundary values.
+
+### 6.3 Performance
+
+The package uses vectorized operations throughout. The GPI computation---the
+most complex step, requiring household-level matching of male and female
+respondents---uses `match()` and vectorized indexing rather than
+row-by-row loops. On a dataset of approximately 23,000 observations
+(12,000 households), `weai()` completes in under 0.1 seconds.
+
+## 7. Validation
+
+The `weaiR` package produces results identical to the Stata `weai` command
+(version 2.0.0, December 2025) when applied to the same data. Version 2.0.0
+of the Stata command corrected a calculation error in the relative
+contribution of each indicator to disempowerment, which now correctly
+sums to 100%. The `weaiR` package implements the corrected formula.
+
+## References
+
+Alkire, S., and J. Foster. 2011. "Counting and Multidimensional Poverty
+Measurement." *Journal of Public Economics* 95 (7--8): 476--87.
+doi:10.1016/j.jpubeco.2010.11.006.
+
+Alkire, S., R. Meinzen-Dick, A. Peterman, A. Quisumbing, G. Seymour,
+and A. Vaz. 2013. "The Women's Empowerment in Agriculture Index."
+*World Development* 52: 71--91. doi:10.1016/j.worlddev.2013.06.007.
+
+Malapit, H., S. Kadiyala, A. Quisumbing, K. Cunningham, and P. Tyagi.
+2015. "Women's Empowerment Mitigates the Negative Effects of Low
+Production Diversity on Maternal and Child Nutrition in Nepal."
+*Journal of Development Studies* 51 (8): 1097--123.
+
+Malapit, H., A. Quisumbing, R. Meinzen-Dick, G. Seymour, E. Martinez,
+J. Heckert, D. Rubin, A. Vaz, K. Yount, and the Gender Agriculture and
+Assets Project Phase 2 (GAAP2) Study Team. 2019. "Development of the
+Project-Level Women's Empowerment in Agriculture Index (pro-WEAI)."
+*World Development* 122: 675--92. doi:10.1016/j.worlddev.2019.06.018.
